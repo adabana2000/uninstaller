@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="windows-uninstaller",
-    version="0.1.0",
+    version="0.7.0",
     description="Advanced Windows application uninstaller with leftover cleanup",
     author="Your Name",
     packages=find_packages(),
@@ -11,6 +11,8 @@ setup(
         "click>=8.1.0",
         "pywin32>=306",
         "python-dateutil>=2.8.0",
+        "tabulate>=0.9.0",
+        "psutil>=5.9.0",
     ],
     entry_points={
         "console_scripts": [

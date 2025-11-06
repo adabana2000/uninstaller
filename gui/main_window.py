@@ -99,23 +99,28 @@ class MainWindow(QMainWindow):
 
         # Program table
         self.program_table = QTableWidget()
-        self.program_table.setColumnCount(6)
+        self.program_table.setColumnCount(7)
         self.program_table.setHorizontalHeaderLabels([
-            "", "プログラム名", "バージョン", "発行元", "サイズ (KB)", "インストール日"
+            "☐", "", "プログラム名", "バージョン", "発行元", "サイズ (KB)", "インストール日"
         ])
-        # Set icon column width
+        # Set checkbox column width
         self.program_table.setColumnWidth(0, 40)
+        # Set icon column width
+        self.program_table.setColumnWidth(1, 40)
         # Make program name column stretch
-        self.program_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.program_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         # Set row height for icons
         self.program_table.verticalHeader().setDefaultSectionSize(36)
         # Hide vertical header (row numbers)
         self.program_table.verticalHeader().setVisible(False)
         self.program_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.program_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.program_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         self.program_table.itemSelectionChanged.connect(self.on_selection_changed)
+        self.program_table.itemChanged.connect(self.on_item_changed)
         # Enable icon rendering
         self.program_table.setIconSize(QSize(32, 32))
+        # Enable sorting
+        self.program_table.setSortingEnabled(True)
 
         splitter.addWidget(self.program_table)
 
@@ -139,11 +144,16 @@ class MainWindow(QMainWindow):
         self.uninstall_button.setEnabled(False)
         self.uninstall_button.clicked.connect(self.uninstall_program)
 
+        self.batch_uninstall_button = QPushButton("選択項目をアンインストール")
+        self.batch_uninstall_button.setEnabled(False)
+        self.batch_uninstall_button.clicked.connect(self.batch_uninstall_programs)
+
         self.scan_button = QPushButton("残留物スキャン")
         self.scan_button.setEnabled(False)
         self.scan_button.clicked.connect(self.scan_leftovers)
 
         button_layout.addWidget(self.uninstall_button)
+        button_layout.addWidget(self.batch_uninstall_button)
         button_layout.addWidget(self.scan_button)
         button_layout.addStretch()
 
@@ -257,36 +267,49 @@ class MainWindow(QMainWindow):
 
     def populate_table(self):
         """Populate the program table."""
+        # Disable sorting while populating to avoid issues
+        self.program_table.setSortingEnabled(False)
         self.program_table.setRowCount(0)
 
         for program in self.filtered_programs:
             row = self.program_table.rowCount()
             self.program_table.insertRow(row)
 
+            # Checkbox
+            checkbox_item = QTableWidgetItem()
+            checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            checkbox_item.setCheckState(Qt.CheckState.Unchecked)
+            self.program_table.setItem(row, 0, checkbox_item)
+
             # Icon
             icon = get_program_icon(program)
             icon_item = QTableWidgetItem()
             icon_item.setIcon(icon)
-            self.program_table.setItem(row, 0, icon_item)
+            self.program_table.setItem(row, 1, icon_item)
 
             # Name
-            self.program_table.setItem(row, 1, QTableWidgetItem(program.name))
+            self.program_table.setItem(row, 2, QTableWidgetItem(program.name))
 
             # Version
             version = program.version or "不明"
-            self.program_table.setItem(row, 2, QTableWidgetItem(version))
+            self.program_table.setItem(row, 3, QTableWidgetItem(version))
 
             # Publisher
             publisher = program.publisher or "不明"
-            self.program_table.setItem(row, 3, QTableWidgetItem(publisher))
+            self.program_table.setItem(row, 4, QTableWidgetItem(publisher))
 
             # Size
             size = str(program.estimated_size) if program.estimated_size else "不明"
-            self.program_table.setItem(row, 4, QTableWidgetItem(size))
+            size_item = QTableWidgetItem()
+            size_item.setData(Qt.ItemDataRole.DisplayRole, program.estimated_size or 0)
+            self.program_table.setItem(row, 5, size_item)
 
             # Install date
             install_date = program.install_date or "不明"
-            self.program_table.setItem(row, 5, QTableWidgetItem(install_date))
+            self.program_table.setItem(row, 6, QTableWidgetItem(install_date))
+
+        # Re-enable sorting after population
+        self.program_table.setSortingEnabled(True)
 
     def filter_programs(self, text):
         """Filter programs by search text."""
@@ -314,22 +337,39 @@ class MainWindow(QMainWindow):
 
         self.populate_table()
 
+    def on_item_changed(self, item):
+        """Called when an item changes (e.g., checkbox state)."""
+        # Update button states when checkbox is toggled
+        if item.column() == 0:  # Checkbox column
+            self.update_button_states()
+
+    def update_button_states(self):
+        """Update button states based on checked items."""
+        checked_count = self.get_checked_programs_count()
+        self.batch_uninstall_button.setEnabled(checked_count > 0)
+        if checked_count > 0:
+            self.batch_uninstall_button.setText(f"選択項目をアンインストール ({checked_count})")
+        else:
+            self.batch_uninstall_button.setText("選択項目をアンインストール")
+
     def on_selection_changed(self):
         """Called when selection changes."""
+        # Count checked items
+        checked_count = self.get_checked_programs_count()
+
         selected_items = self.program_table.selectedItems()
         if not selected_items:
             self.selected_program = None
             self.details_text.clear()
             self.uninstall_button.setEnabled(False)
             self.scan_button.setEnabled(False)
-            return
+        else:
+            # Get selected row
+            row = selected_items[0].row()
+            self.selected_program = self.filtered_programs[row]
 
-        # Get selected row
-        row = selected_items[0].row()
-        self.selected_program = self.filtered_programs[row]
-
-        # Update details
-        details = f"""
+            # Update details
+            details = f"""
 <b>プログラム名:</b> {self.selected_program.name}<br>
 <b>バージョン:</b> {self.selected_program.version or '不明'}<br>
 <b>発行元:</b> {self.selected_program.publisher or '不明'}<br>
@@ -339,12 +379,19 @@ class MainWindow(QMainWindow):
 <b>アーキテクチャ:</b> {self.selected_program.architecture}<br>
 <b>アンインストール文字列:</b> {self.selected_program.uninstall_string or '不明'}<br>
 <b>レジストリキー:</b> {self.selected_program.registry_key or '不明'}<br>
-        """
-        self.details_text.setHtml(details)
+            """
+            self.details_text.setHtml(details)
 
-        # Enable buttons
-        self.uninstall_button.setEnabled(True)
-        self.scan_button.setEnabled(True)
+            # Enable buttons
+            self.uninstall_button.setEnabled(True)
+            self.scan_button.setEnabled(True)
+
+        # Enable batch uninstall button if items are checked
+        self.batch_uninstall_button.setEnabled(checked_count > 0)
+        if checked_count > 0:
+            self.batch_uninstall_button.setText(f"選択項目をアンインストール ({checked_count})")
+        else:
+            self.batch_uninstall_button.setText("選択項目をアンインストール")
 
     def uninstall_program(self):
         """Uninstall selected program."""
@@ -376,6 +423,71 @@ class MainWindow(QMainWindow):
         # Show scan dialog
         dialog = ScanDialog(self.selected_program, self)
         dialog.exec()
+
+    def get_checked_programs_count(self):
+        """Get count of checked programs."""
+        count = 0
+        for row in range(self.program_table.rowCount()):
+            checkbox_item = self.program_table.item(row, 0)
+            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
+                count += 1
+        return count
+
+    def get_checked_programs(self):
+        """Get list of checked programs."""
+        checked_programs = []
+        for row in range(self.program_table.rowCount()):
+            checkbox_item = self.program_table.item(row, 0)
+            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
+                # Get program name from column 2 (name column)
+                name_item = self.program_table.item(row, 2)
+                if name_item:
+                    program_name = name_item.text()
+                    # Find the program in filtered_programs
+                    for program in self.filtered_programs:
+                        if program.name == program_name:
+                            checked_programs.append(program)
+                            break
+        return checked_programs
+
+    def batch_uninstall_programs(self):
+        """Batch uninstall checked programs."""
+        checked_programs = self.get_checked_programs()
+
+        if not checked_programs:
+            return
+
+        # Check admin privileges
+        if not is_admin():
+            QMessageBox.warning(
+                self,
+                "権限不足",
+                "アンインストールには管理者権限が必要です。\n"
+                "アプリケーションを管理者として実行してください。"
+            )
+            return
+
+        # Confirm
+        reply = QMessageBox.question(
+            self,
+            "確認",
+            f"{len(checked_programs)}個のプログラムをアンインストールします。\n"
+            "この操作は取り消せません。続行しますか？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Import batch uninstall dialog
+        from gui.widgets.batch_uninstall_dialog import BatchUninstallDialog
+
+        # Show batch uninstall dialog
+        dialog = BatchUninstallDialog(checked_programs, self)
+        dialog.exec()
+
+        # Reload programs after dialog closes
+        self.load_programs()
 
     def cleanup_backups(self):
         """Clean up old backups."""
@@ -484,13 +596,72 @@ class MainWindow(QMainWindow):
                 f"エクスポート中にエラーが発生しました:\n{str(e)}"
             )
 
+    def keyPressEvent(self, event):
+        """Handle key press events."""
+        from PyQt6.QtGui import QKeyEvent
+        from PyQt6.QtCore import Qt
+
+        # Delete key - Uninstall selected program
+        if event.key() == Qt.Key.Key_Delete:
+            if self.selected_program and self.uninstall_button.isEnabled():
+                self.uninstall_program()
+            elif self.get_checked_programs_count() > 0:
+                self.batch_uninstall_programs()
+
+        # F5 - Refresh program list
+        elif event.key() == Qt.Key.Key_F5:
+            self.load_programs()
+
+        # Ctrl+F - Focus search box
+        elif event.key() == Qt.Key.Key_F and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.search_box.setFocus()
+            self.search_box.selectAll()
+
+        # Ctrl+A - Select/check all items
+        elif event.key() == Qt.Key.Key_A and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            self.toggle_all_checkboxes()
+
+        # Escape - Clear search
+        elif event.key() == Qt.Key.Key_Escape:
+            if self.search_box.text():
+                self.search_box.clear()
+            else:
+                super().keyPressEvent(event)
+
+        else:
+            super().keyPressEvent(event)
+
+    def toggle_all_checkboxes(self):
+        """Toggle all checkboxes (select all or deselect all)."""
+        # Check if any are unchecked
+        has_unchecked = False
+        for row in range(self.program_table.rowCount()):
+            checkbox_item = self.program_table.item(row, 0)
+            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Unchecked:
+                has_unchecked = True
+                break
+
+        # Set all to checked if any are unchecked, otherwise uncheck all
+        new_state = Qt.CheckState.Checked if has_unchecked else Qt.CheckState.Unchecked
+
+        # Block signals to avoid multiple updates
+        self.program_table.blockSignals(True)
+        for row in range(self.program_table.rowCount()):
+            checkbox_item = self.program_table.item(row, 0)
+            if checkbox_item:
+                checkbox_item.setCheckState(new_state)
+        self.program_table.blockSignals(False)
+
+        # Update button states once
+        self.update_button_states()
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
             self,
             "バージョン情報",
             "<h2>Windows Uninstaller</h2>"
-            "<p>バージョン: 0.6.0 (Phase 6 完了)</p>"
+            "<p>バージョン: 0.7.0 (Phase 7 完了)</p>"
             "<p>IObit Uninstallerのような高機能なアンインストーラー</p>"
             "<p><b>機能:</b></p>"
             "<ul>"
@@ -501,6 +672,9 @@ class MainWindow(QMainWindow):
             "<li>インストールモニター</li>"
             "<li>統計とレポート</li>"
             "<li>エクスポート機能 (CSV/JSON/HTML)</li>"
+            "<li>バッチアンインストール (複数選択)</li>"
+            "<li>テーブルヘッダークリックソート</li>"
+            "<li>キーボードショートカット対応</li>"
             "</ul>"
         )
 
