@@ -22,6 +22,8 @@ from utils.icon_extractor import get_program_icon
 from gui.widgets.uninstall_dialog import UninstallDialog
 from gui.widgets.scan_dialog import ScanDialog
 from gui.widgets.monitor_dialog import MonitorDialog
+from gui.widgets.background_monitor_settings_dialog import BackgroundMonitorSettingsDialog
+from core.background_monitor import BackgroundMonitorManager
 
 
 class ProgramLoaderThread(QThread):
@@ -51,6 +53,7 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.init_system_tray()
+        self.init_background_monitor()
         self.load_programs()
 
     def init_ui(self):
@@ -205,6 +208,13 @@ class MainWindow(QMainWindow):
 
         tray_menu.addSeparator()
 
+        # Background monitor settings
+        bg_monitor_action = QAction("バックグラウンドモニター設定", self)
+        bg_monitor_action.triggered.connect(self.show_background_monitor_settings)
+        tray_menu.addAction(bg_monitor_action)
+
+        tray_menu.addSeparator()
+
         # Exit action
         exit_action = QAction("終了", self)
         exit_action.triggered.connect(self.quit_application)
@@ -236,8 +246,47 @@ class MainWindow(QMainWindow):
 
     def quit_application(self):
         """Quit application completely."""
+        # Stop background monitor
+        try:
+            monitor = BackgroundMonitorManager.get_instance()
+            if monitor.is_running():
+                monitor.stop()
+                self.logger.info("Background monitor stopped on exit")
+        except Exception as e:
+            self.logger.error(f"Error stopping background monitor: {e}")
+
         self.tray_icon.hide()
         QApplication.quit()
+
+    def init_background_monitor(self):
+        """Initialize background monitor with callback."""
+        def on_installation_detected(program_name: str):
+            """Handle new installation detection."""
+            self.logger.info(f"New installation detected: {program_name}")
+
+            # Show tray notification
+            if hasattr(self, 'tray_icon'):
+                self.tray_icon.showMessage(
+                    "新しいインストールを検知",
+                    f"プログラム: {program_name}\n\n自動的に記録されました。",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    5000
+                )
+
+        # Initialize monitor (singleton)
+        try:
+            self.background_monitor = BackgroundMonitorManager.get_instance(on_installation_detected)
+
+            # Start if enabled in config
+            from utils.config import ConfigManager
+            config = ConfigManager()
+            if config.get('monitor.enabled', False):
+                if not self.background_monitor.is_running():
+                    self.background_monitor.start()
+                    self.logger.info("Background monitor started on app launch")
+
+        except Exception as e:
+            self.logger.error(f"Failed to initialize background monitor: {e}")
 
     def create_menu_bar(self):
         """Create menu bar."""
@@ -281,6 +330,10 @@ class MainWindow(QMainWindow):
         monitor_action = QAction("インストールモニター(&M)", self)
         monitor_action.triggered.connect(self.show_monitor)
         tools_menu.addAction(monitor_action)
+
+        bg_monitor_action = QAction("バックグラウンドモニター設定(&B)", self)
+        bg_monitor_action.triggered.connect(self.show_background_monitor_settings)
+        tools_menu.addAction(bg_monitor_action)
 
         stats_action = QAction("統計(&S)", self)
         stats_action.triggered.connect(self.show_statistics)
@@ -760,6 +813,15 @@ class MainWindow(QMainWindow):
         # Update button states once
         self.update_button_states()
 
+    def show_background_monitor_settings(self):
+        """Show background monitor settings dialog."""
+        dialog = BackgroundMonitorSettingsDialog(self)
+        dialog.exec()
+
+        # Refresh program list after settings change
+        # (in case monitor detected new programs while dialog was open)
+        self.load_programs()
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -775,11 +837,13 @@ class MainWindow(QMainWindow):
             "<li>自動バックアップ</li>"
             "<li>グラフィカルユーザーインターフェイス (GUI)</li>"
             "<li>インストールモニター</li>"
+            "<li>バックグラウンドモニター (常駐型インストール検知)</li>"
             "<li>統計とレポート</li>"
             "<li>エクスポート機能 (CSV/JSON/HTML)</li>"
             "<li>バッチアンインストール (複数選択)</li>"
             "<li>テーブルヘッダークリックソート</li>"
             "<li>キーボードショートカット対応</li>"
+            "<li>システムトレイ統合</li>"
             "</ul>"
         )
 
