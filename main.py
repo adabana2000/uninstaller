@@ -13,6 +13,7 @@ def main():
     Main entry point.
 
     Determines whether to run in CLI or GUI mode based on command-line arguments.
+    If no arguments are provided, defaults to GUI mode.
     """
     # Parse command-line arguments
     parser = argparse.ArgumentParser(
@@ -26,8 +27,13 @@ def main():
     args, remaining = parser.parse_known_args()
 
     # Determine mode
-    if args.gui:
-        # Launch GUI mode
+    if args.cli or (remaining and not args.gui):
+        # CLI mode if explicitly requested or if there are CLI arguments
+        # Pass remaining arguments to Click
+        sys.argv = [sys.argv[0]] + remaining
+        cli_main()
+    else:
+        # Default to GUI mode (when no arguments or --gui is specified)
         try:
             from gui.main_window import launch_gui
             launch_gui()
@@ -35,11 +41,6 @@ def main():
             print(f"Error: GUI dependencies not installed: {e}")
             print("Please install PyQt6: pip install PyQt6")
             sys.exit(1)
-    else:
-        # Default to CLI mode
-        # Pass remaining arguments to Click
-        sys.argv = [sys.argv[0]] + remaining
-        cli_main()
 
 
 if __name__ == "__main__":

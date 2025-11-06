@@ -54,10 +54,11 @@ desktop.ini
 htmlcov/
 
 # Build artifacts
+dist/
+build/
+Output/
 *.exe
 *.msi
-*.spec
-Output/
 
 # Temporary files
 *.tmp

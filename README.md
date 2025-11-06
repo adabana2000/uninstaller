@@ -73,13 +73,39 @@ IObit Uninstallerのような高機能なWindowsアンインストーラー。Py
 
 ## インストール
 
-### 1. 依存関係のインストール
+### 方法1: Windows インストーラー（推奨）
+
+**リリースページからインストーラーをダウンロード:**
+- `WindowsUninstaller-Setup-0.7.0.exe` をダウンロード
+- インストーラーを実行
+- インストールウィザードに従ってインストール
+
+**特徴:**
+- Program Filesへの自動インストール
+- スタートメニューへのショートカット作成
+- デスクトップアイコン（オプション）
+- アンインストーラーの自動登録
+
+### 方法2: ポータブル版（EXE単体）
+
+**リリースページからEXEをダウンロード:**
+- `WindowsUninstaller.exe` をダウンロード
+- 任意の場所に配置して実行
+
+**特徴:**
+- インストール不要
+- USBメモリなどでの持ち運びが可能
+- 実行するだけで使用可能
+
+### 方法3: ソースコードから実行（開発者向け）
+
+#### 1. 依存関係のインストール
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. (オプション) 開発用インストール
+#### 2. (オプション) 開発用インストール
 
 ```bash
 pip install -e .
@@ -175,17 +201,38 @@ python main.py cleanup --keep-days 30
 
 ### GUIモード ✨新機能✨
 
+**インストーラー版またはポータブル版:**
+```bash
+# スタートメニューまたはデスクトップアイコンから起動
+# または、WindowsUninstaller.exe をダブルクリック
+```
+
+**ソースコードから:**
 ```bash
 python main.py --gui
+# または、引数なしで実行するとデフォルトでGUIモードで起動
+python main.py
 ```
 
 **GUI機能:**
 - プログラム一覧の表示と検索（アイコン表示対応）
+- チェックボックスによる複数選択
+- バッチアンインストール（複数プログラムの一括削除）
+- テーブルヘッダークリックソート（すべての列で昇順/降順）
+- キーボードショートカット対応（Delete、F5、Ctrl+F、Ctrl+A、Escape）
+- システムトレイ統合（最小化時にトレイアイコン表示、常駐機能）
 - プログラムのアンインストール（進捗表示付き）
 - 残留物の自動スキャンと削除
 - リアルタイムログ出力
 - 詳細情報の表示
 - バックアップ管理
+
+**キーボードショートカット:**
+- `Delete`: 選択/チェックしたプログラムをアンインストール
+- `F5`: プログラム一覧を更新
+- `Ctrl+F`: 検索ボックスにフォーカス
+- `Ctrl+A`: すべてのチェックボックスを切り替え
+- `Escape`: 検索をクリア
 
 ## テスト
 
@@ -321,10 +368,63 @@ uninstaller/
 **現在の進捗**: Phase 7 完了 (基本機能100%完成！)
 
 **今後の拡張予定:**
-- PyInstallerによるEXE化
-- Inno Setupインストーラー作成
 - エクスプローラー右クリックメニュー統合
-- バックグラウンドインストール監視
+- バックグラウンドインストール監視の常駐化
+
+## ビルド手順（開発者向け）
+
+このセクションでは、EXEファイルとWindowsインストーラーのビルド方法を説明します。
+
+### 前提条件
+
+1. **PyInstaller** のインストール:
+```bash
+pip install pyinstaller
+```
+
+2. **Inno Setup** のインストール（インストーラー作成時のみ）:
+   - ダウンロード: https://jrsoftware.org/isinfo.php
+   - インストール先: `C:\Program Files (x86)\Inno Setup 6\`
+
+### ビルド方法
+
+#### 簡単な方法（バッチファイル使用）
+
+1. **EXEファイルの作成:**
+```batch
+build_exe.bat
+```
+成果物: `dist\WindowsUninstaller.exe`
+
+2. **Windowsインストーラーの作成:**
+```batch
+build_installer.bat
+```
+成果物: `Output\WindowsUninstaller-Setup-0.7.0.exe`
+
+#### 手動ビルド
+
+1. **EXEファイルの作成:**
+```bash
+pyinstaller windows-uninstaller.spec
+```
+
+2. **Windowsインストーラーの作成:**
+```bash
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+```
+
+### 詳細なビルド手順
+
+詳しいビルド手順、トラブルシューティング、カスタマイズ方法については、[BUILD.md](BUILD.md) を参照してください。
+
+### ビルドファイル
+
+- `windows-uninstaller.spec` - PyInstallerの設定ファイル
+- `version_info.txt` - EXEファイルのバージョン情報
+- `installer.iss` - Inno Setupのインストーラースクリプト
+- `build_exe.bat` - EXEビルドスクリプト
+- `build_installer.bat` - インストーラービルドスクリプト
 
 ## 貢献
 
@@ -346,6 +446,10 @@ uninstaller/
 - バッチアンインストールダイアログ: 進捗表示とログ出力
 - GUI更新: 7列テーブル（チェックボックス、アイコン、名前、バージョン、発行元、サイズ、日付）
 - バージョン管理統一: setup.pyとmain_window.pyを0.7.0に統一
+- PyInstaller対応: EXE化のための設定ファイル（.spec）とビルドスクリプト
+- Inno Setup対応: Windowsインストーラー作成スクリプト（.iss）
+- ビルドドキュメント: BUILD.mdの追加、ビルド手順の詳細化
+- デフォルトGUIモード: 引数なしで起動するとGUIモードで起動
 
 **v0.6.0 (2025-11-06)** - Phase 6 完了 - 追加機能と最適化
 - 設定管理: JSON形式での設定の永続化、deep copyによる安全な操作
