@@ -1,0 +1,231 @@
+{
+  "apps": [
+    {
+      "name": "Google Chrome",
+      "publisher": "Google LLC",
+      "patterns": ["Chrome", "Google Chrome"],
+      "processes_to_kill": [
+        "chrome.exe",
+        "GoogleUpdate.exe",
+        "GoogleCrashHandler.exe",
+        "GoogleCrashHandler64.exe"
+      ],
+      "services_to_stop": [
+        "gupdate",
+        "gupdatem"
+      ],
+      "additional_paths": [
+        "%LOCALAPPDATA%\\Google",
+        "%PROGRAMDATA%\\Google"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Google",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Google",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Google"
+      ],
+      "notes": "Chrome often leaves background processes running"
+    },
+    {
+      "name": "Mozilla Firefox",
+      "publisher": "Mozilla Corporation",
+      "patterns": ["Firefox", "Mozilla Firefox"],
+      "processes_to_kill": [
+        "firefox.exe",
+        "plugin-container.exe",
+        "updater.exe"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\Mozilla",
+        "%LOCALAPPDATA%\\Mozilla"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Mozilla",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Mozilla",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Mozilla"
+      ]
+    },
+    {
+      "name": "Microsoft Edge",
+      "publisher": "Microsoft Corporation",
+      "patterns": ["Microsoft Edge", "Edge"],
+      "processes_to_kill": [
+        "msedge.exe",
+        "MicrosoftEdgeUpdate.exe",
+        "msedgewebview2.exe"
+      ],
+      "services_to_stop": [
+        "edgeupdate",
+        "edgeupdatem"
+      ],
+      "additional_paths": [
+        "%LOCALAPPDATA%\\Microsoft\\Edge",
+        "%PROGRAMDATA%\\Microsoft\\EdgeUpdate"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Edge",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Edge",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Edge"
+      ]
+    },
+    {
+      "name": "Adobe Acrobat Reader",
+      "publisher": "Adobe",
+      "patterns": ["Adobe Acrobat", "Adobe Reader", "Acrobat Reader"],
+      "processes_to_kill": [
+        "AcroRd32.exe",
+        "Acrobat.exe",
+        "AdobeARM.exe",
+        "AdobeCollabSync.exe"
+      ],
+      "services_to_stop": [
+        "AdobeARMservice",
+        "AdobeUpdateService"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\Adobe",
+        "%LOCALAPPDATA%\\Adobe",
+        "%PROGRAMDATA%\\Adobe",
+        "%COMMONPROGRAMFILES%\\Adobe"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Adobe",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Adobe",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Adobe"
+      ],
+      "notes": "Adobe products often have many background services and processes"
+    },
+    {
+      "name": "Java",
+      "publisher": "Oracle Corporation",
+      "patterns": ["Java", "JRE", "JDK"],
+      "processes_to_kill": [
+        "java.exe",
+        "javaw.exe",
+        "javaws.exe",
+        "jp2launcher.exe"
+      ],
+      "services_to_stop": [
+        "JavaQuickStarterService"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\Sun\\Java",
+        "%LOCALAPPDATA%\\Sun\\Java",
+        "%PROGRAMDATA%\\Oracle\\Java"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\JavaSoft",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\JavaSoft",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\JavaSoft"
+      ]
+    },
+    {
+      "name": "Skype",
+      "publisher": "Microsoft Corporation",
+      "patterns": ["Skype"],
+      "processes_to_kill": [
+        "Skype.exe",
+        "SkypeHost.exe",
+        "SkypeBridge.exe"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\Skype",
+        "%LOCALAPPDATA%\\Skype",
+        "%PROGRAMDATA%\\Skype"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Skype",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Skype",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Skype"
+      ]
+    },
+    {
+      "name": "TeamViewer",
+      "publisher": "TeamViewer",
+      "patterns": ["TeamViewer"],
+      "processes_to_kill": [
+        "TeamViewer.exe",
+        "TeamViewer_Service.exe",
+        "tv_w32.exe",
+        "tv_x64.exe"
+      ],
+      "services_to_stop": [
+        "TeamViewer"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\TeamViewer",
+        "%PROGRAMDATA%\\TeamViewer"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\TeamViewer",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\TeamViewer",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\TeamViewer"
+      ]
+    },
+    {
+      "name": "Dropbox",
+      "publisher": "Dropbox, Inc.",
+      "patterns": ["Dropbox"],
+      "processes_to_kill": [
+        "Dropbox.exe",
+        "DropboxUpdate.exe"
+      ],
+      "services_to_stop": [
+        "dbupdate",
+        "dbupdatem"
+      ],
+      "additional_paths": [
+        "%APPDATA%\\Dropbox",
+        "%LOCALAPPDATA%\\Dropbox",
+        "%PROGRAMDATA%\\Dropbox"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Dropbox",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Dropbox",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Dropbox"
+      ]
+    },
+    {
+      "name": "OneDrive",
+      "publisher": "Microsoft Corporation",
+      "patterns": ["OneDrive", "Microsoft OneDrive"],
+      "processes_to_kill": [
+        "OneDrive.exe",
+        "FileCoAuth.exe"
+      ],
+      "additional_paths": [
+        "%LOCALAPPDATA%\\Microsoft\\OneDrive",
+        "%PROGRAMDATA%\\Microsoft OneDrive"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\OneDrive",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\OneDrive",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\OneDrive"
+      ],
+      "notes": "OneDrive is deeply integrated with Windows and may require special handling"
+    },
+    {
+      "name": "Steam",
+      "publisher": "Valve Corporation",
+      "patterns": ["Steam"],
+      "processes_to_kill": [
+        "steam.exe",
+        "steamwebhelper.exe",
+        "steamerrorreporter.exe"
+      ],
+      "services_to_stop": [
+        "Steam Client Service"
+      ],
+      "additional_paths": [
+        "%PROGRAMFILES(X86)%\\Steam",
+        "%APPDATA%\\Steam",
+        "%LOCALAPPDATA%\\Steam"
+      ],
+      "registry_keys": [
+        "HKEY_CURRENT_USER\\Software\\Valve",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\Valve",
+        "HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\Valve"
+      ],
+      "notes": "Steam may have games installed - consider warning user"
+    }
+  ]
+}

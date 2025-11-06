@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python test_basic.py:*)",
+      "Bash(python test_phase2.py:*)",
+      "Bash(timeout:*)",
+      "Bash(python test_phase3.py:*)",
+      "Bash(pip install:*)",
+      "Bash(=5.9.0)",
+      "Bash(python test_phase4.py:*)",
+      "Bash(python test_phase5.py:*)",
+      "Bash(python test_phase6.py:*)",
+      "Bash(tree:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
