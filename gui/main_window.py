@@ -7,10 +7,10 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QStatusBar, QMessageBox, QSplitter, QTextEdit,
-    QComboBox, QProgressBar, QMenuBar, QMenu
+    QComboBox, QProgressBar, QMenuBar, QMenu, QSystemTrayIcon
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtGui import QAction, QIcon, QCloseEvent
 
 from core.registry import RegistryReader, InstalledProgram
 from core.uninstaller import Uninstaller
@@ -50,6 +50,7 @@ class MainWindow(QMainWindow):
         self.selected_program = None
 
         self.init_ui()
+        self.init_system_tray()
         self.load_programs()
 
     def init_ui(self):
@@ -179,6 +180,64 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("✓ 管理者権限で実行中")
         else:
             self.status_bar.showMessage("⚠ 管理者権限なし - 一部機能が制限されます")
+
+    def init_system_tray(self):
+        """Initialize system tray icon."""
+        # Create system tray icon
+        self.tray_icon = QSystemTrayIcon(self)
+
+        # Set icon (use a simple icon for now)
+        # In production, you would use a proper icon file
+        self.tray_icon.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
+
+        # Create tray menu
+        tray_menu = QMenu()
+
+        # Show/Hide action
+        show_action = QAction("表示", self)
+        show_action.triggered.connect(self.show_from_tray)
+        tray_menu.addAction(show_action)
+
+        # Refresh action
+        refresh_action = QAction("更新", self)
+        refresh_action.triggered.connect(self.load_programs)
+        tray_menu.addAction(refresh_action)
+
+        tray_menu.addSeparator()
+
+        # Exit action
+        exit_action = QAction("終了", self)
+        exit_action.triggered.connect(self.quit_application)
+        tray_menu.addAction(exit_action)
+
+        # Set menu
+        self.tray_icon.setContextMenu(tray_menu)
+
+        # Double click to show window
+        self.tray_icon.activated.connect(self.on_tray_activated)
+
+        # Set tooltip
+        self.tray_icon.setToolTip("Windows Uninstaller")
+
+        # Show tray icon
+        self.tray_icon.show()
+
+    def on_tray_activated(self, reason):
+        """Handle tray icon activation."""
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.show_from_tray()
+
+    def show_from_tray(self):
+        """Show window from system tray."""
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+        self.raise_()
+
+    def quit_application(self):
+        """Quit application completely."""
+        self.tray_icon.hide()
+        QApplication.quit()
 
     def create_menu_bar(self):
         """Create menu bar."""
@@ -595,6 +654,52 @@ class MainWindow(QMainWindow):
                 "エクスポートエラー",
                 f"エクスポート中にエラーが発生しました:\n{str(e)}"
             )
+
+    def changeEvent(self, event):
+        """Handle window state changes."""
+        if event.type() == event.Type.WindowStateChange:
+            # Hide to tray when minimized
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                self.hide()
+                self.tray_icon.showMessage(
+                    "Windows Uninstaller",
+                    "アプリケーションはシステムトレイに最小化されました",
+                    QSystemTrayIcon.MessageIcon.Information,
+                    2000
+                )
+                event.ignore()
+                return
+        super().changeEvent(event)
+
+    def closeEvent(self, event: QCloseEvent):
+        """Handle close event."""
+        # Ask user if they want to minimize to tray or exit
+        reply = QMessageBox.question(
+            self,
+            "確認",
+            "アプリケーションを終了しますか？\n\n"
+            "「いいえ」を選択するとシステムトレイに最小化されます。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Exit application
+            self.tray_icon.hide()
+            event.accept()
+        elif reply == QMessageBox.StandardButton.No:
+            # Minimize to tray
+            self.hide()
+            self.tray_icon.showMessage(
+                "Windows Uninstaller",
+                "アプリケーションはシステムトレイに最小化されました",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000
+            )
+            event.ignore()
+        else:
+            # Cancel
+            event.ignore()
 
     def keyPressEvent(self, event):
         """Handle key press events."""
