@@ -23,6 +23,7 @@ from gui.widgets.uninstall_dialog import UninstallDialog
 from gui.widgets.scan_dialog import ScanDialog
 from gui.widgets.monitor_dialog import MonitorDialog
 from gui.widgets.background_monitor_settings_dialog import BackgroundMonitorSettingsDialog
+from gui.widgets.context_menu_dialog import ContextMenuDialog
 from core.background_monitor import BackgroundMonitorManager
 
 
@@ -334,6 +335,10 @@ class MainWindow(QMainWindow):
         bg_monitor_action = QAction("バックグラウンドモニター設定(&B)", self)
         bg_monitor_action.triggered.connect(self.show_background_monitor_settings)
         tools_menu.addAction(bg_monitor_action)
+
+        context_menu_action = QAction("右クリックメニュー統合(&R)", self)
+        context_menu_action.triggered.connect(self.show_context_menu_dialog)
+        tools_menu.addAction(context_menu_action)
 
         stats_action = QAction("統計(&S)", self)
         stats_action.triggered.connect(self.show_statistics)
@@ -822,6 +827,11 @@ class MainWindow(QMainWindow):
         # (in case monitor detected new programs while dialog was open)
         self.load_programs()
 
+    def show_context_menu_dialog(self):
+        """Show context menu integration dialog."""
+        dialog = ContextMenuDialog(self)
+        dialog.exec()
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -844,6 +854,7 @@ class MainWindow(QMainWindow):
             "<li>テーブルヘッダークリックソート</li>"
             "<li>キーボードショートカット対応</li>"
             "<li>システムトレイ統合</li>"
+            "<li>右クリックメニュー統合 (エクスプローラーから直接アンインストール)</li>"
             "</ul>"
         )
 
@@ -855,6 +866,65 @@ def launch_gui():
 
     window = MainWindow()
     window.show()
+
+    sys.exit(app.exec())
+
+
+def launch_gui_with_file(file_path: str):
+    """
+    Launch the GUI application and attempt to uninstall program from file path.
+
+    This is called when the application is launched from Windows Explorer context menu.
+
+    Args:
+        file_path: Path to the executable or shortcut file
+    """
+    from utils.program_finder import find_program_from_file
+
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")  # Modern look
+
+    # Find the program
+    program = find_program_from_file(file_path)
+
+    if not program:
+        # Show error message
+        QMessageBox.critical(
+            None,
+            "プログラムが見つかりません",
+            f"このファイルに対応するインストール済みプログラムが見つかりませんでした:\n\n{file_path}\n\n"
+            "通常のアンインストール方法を使用してください。"
+        )
+        sys.exit(1)
+
+    # Launch main window
+    window = MainWindow()
+    window.show()
+
+    # Select the program in the table
+    for row in range(window.program_table.rowCount()):
+        # Column 2 is the program name column (after checkbox and icon)
+        name_item = window.program_table.item(row, 2)
+        if name_item and name_item.text() == program.name:
+            window.program_table.selectRow(row)
+            window.selected_program = program
+            window.update_details()
+            window.update_button_states()
+            break
+
+    # Show confirmation dialog
+    reply = QMessageBox.question(
+        window,
+        "アンインストール確認",
+        f"次のプログラムをアンインストールしますか？\n\n{program.name}\n\n"
+        f"発行元: {program.publisher or '不明'}\n"
+        f"バージョン: {program.version or '不明'}",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+    )
+
+    if reply == QMessageBox.StandardButton.Yes:
+        # Start uninstall process
+        window.uninstall_program()
 
     sys.exit(app.exec())
 

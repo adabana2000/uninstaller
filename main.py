@@ -22,9 +22,21 @@ def main():
     )
     parser.add_argument("--gui", action="store_true", help="Launch GUI mode")
     parser.add_argument("--cli", action="store_true", help="Force CLI mode")
+    parser.add_argument("--uninstall-from-file", type=str, help="Uninstall program from file path (context menu)")
 
     # Parse known args to avoid conflicts with Click
     args, remaining = parser.parse_known_args()
+
+    # Handle context menu uninstall
+    if args.uninstall_from_file:
+        try:
+            from gui.main_window import launch_gui_with_file
+            launch_gui_with_file(args.uninstall_from_file)
+        except ImportError as e:
+            print(f"Error: GUI dependencies not installed: {e}")
+            print("Please install PyQt6: pip install PyQt6")
+            sys.exit(1)
+        return
 
     # Determine mode
     if args.cli or (remaining and not args.gui):
