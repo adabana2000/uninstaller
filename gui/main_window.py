@@ -4,21 +4,17 @@ Main window for the GUI application.
 
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QHeaderView, QStatusBar, QMessageBox, QSplitter, QTextEdit,
-    QComboBox, QProgressBar, QMenuBar, QMenu, QSystemTrayIcon
+    QApplication, QMainWindow, QWidget, QVBoxLayout,
+    QStatusBar, QMessageBox, QSplitter, QTextEdit,
+    QProgressBar, QSystemTrayIcon, QMenu, QTableWidget
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt6.QtGui import QAction, QIcon, QCloseEvent
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QAction, QCloseEvent
 
 from core.registry import RegistryReader, InstalledProgram
-from core.uninstaller import Uninstaller
-from core.scanner import LeftoverScanner
-from core.cleaner import Cleaner
 from utils.logger import get_logger
 from utils.permissions import is_admin
-from utils.icon_extractor import get_program_icon
+from gui.components import ProgramTableManager, SearchBarComponent, MenuBarHandler
 from gui.widgets.uninstall_dialog import UninstallDialog
 from gui.widgets.scan_dialog import ScanDialog
 from gui.widgets.monitor_dialog import MonitorDialog
@@ -48,9 +44,12 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.logger = get_logger()
-        self.programs = []
-        self.filtered_programs = []
         self.selected_program = None
+
+        # Components will be initialized in init_ui
+        self.table_manager = None
+        self.search_bar = None
+        self.menu_handler = None
 
         self.init_ui()
         self.init_system_tray()
@@ -62,8 +61,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Windows Uninstaller")
         self.setGeometry(100, 100, 1200, 700)
 
-        # Create menu bar
-        self.create_menu_bar()
+        # Create menu bar with handler
+        self.menu_handler = MenuBarHandler(self.menuBar(), self)
+        self._connect_menu_signals()
 
         # Create central widget
         central_widget = QWidget()
@@ -72,60 +72,21 @@ class MainWindow(QMainWindow):
         # Main layout
         main_layout = QVBoxLayout(central_widget)
 
-        # Top controls
-        top_layout = QHBoxLayout()
-
-        # Search box
-        self.search_label = QLabel("検索:")
-        self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("プログラム名で検索...")
-        self.search_box.textChanged.connect(self.filter_programs)
-
-        # Sort combo
-        self.sort_label = QLabel("並び替え:")
-        self.sort_combo = QComboBox()
-        self.sort_combo.addItems(["名前", "サイズ", "インストール日"])
-        self.sort_combo.currentTextChanged.connect(self.sort_programs)
-
-        # Refresh button
-        self.refresh_button = QPushButton("更新")
-        self.refresh_button.clicked.connect(self.load_programs)
-
-        top_layout.addWidget(self.search_label)
-        top_layout.addWidget(self.search_box, 1)
-        top_layout.addWidget(self.sort_label)
-        top_layout.addWidget(self.sort_combo)
-        top_layout.addWidget(self.refresh_button)
-
-        main_layout.addLayout(top_layout)
+        # Search bar component
+        self.search_bar = SearchBarComponent()
+        self.search_bar.search_changed.connect(self.on_search_changed)
+        self.search_bar.sort_changed.connect(self.on_sort_changed)
+        self.search_bar.refresh_clicked.connect(self.load_programs)
+        main_layout.addWidget(self.search_bar)
 
         # Splitter for table and details
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # Program table
+        # Program table with manager
         self.program_table = QTableWidget()
-        self.program_table.setColumnCount(7)
-        self.program_table.setHorizontalHeaderLabels([
-            "☐", "", "プログラム名", "バージョン", "発行元", "サイズ (KB)", "インストール日"
-        ])
-        # Set checkbox column width
-        self.program_table.setColumnWidth(0, 40)
-        # Set icon column width
-        self.program_table.setColumnWidth(1, 40)
-        # Make program name column stretch
-        self.program_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        # Set row height for icons
-        self.program_table.verticalHeader().setDefaultSectionSize(36)
-        # Hide vertical header (row numbers)
-        self.program_table.verticalHeader().setVisible(False)
-        self.program_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.program_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
+        self.table_manager = ProgramTableManager(self.program_table)
         self.program_table.itemSelectionChanged.connect(self.on_selection_changed)
         self.program_table.itemChanged.connect(self.on_item_changed)
-        # Enable icon rendering
-        self.program_table.setIconSize(QSize(32, 32))
-        # Enable sorting
-        self.program_table.setSortingEnabled(True)
 
         splitter.addWidget(self.program_table)
 
@@ -259,6 +220,18 @@ class MainWindow(QMainWindow):
         self.tray_icon.hide()
         QApplication.quit()
 
+    def _connect_menu_signals(self):
+        """Connect menu bar signals to handlers."""
+        self.menu_handler.refresh_requested.connect(self.load_programs)
+        self.menu_handler.export_requested.connect(self.export_programs)
+        self.menu_handler.monitor_requested.connect(self.show_monitor)
+        self.menu_handler.bg_monitor_settings_requested.connect(self.show_background_monitor_settings)
+        self.menu_handler.context_menu_requested.connect(self.show_context_menu_dialog)
+        self.menu_handler.stats_requested.connect(self.show_statistics)
+        self.menu_handler.cleanup_requested.connect(self.cleanup_backups)
+        self.menu_handler.about_requested.connect(self.show_about)
+        self.menu_handler.exit_requested.connect(self.close)
+
     def init_background_monitor(self):
         """Initialize background monitor with callback."""
         def on_installation_detected(program_name: str):
@@ -289,74 +262,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.logger.error(f"Failed to initialize background monitor: {e}")
 
-    def create_menu_bar(self):
-        """Create menu bar."""
-        menubar = self.menuBar()
-
-        # File menu
-        file_menu = menubar.addMenu("ファイル(&F)")
-
-        refresh_action = QAction("更新(&R)", self)
-        refresh_action.setShortcut("F5")
-        refresh_action.triggered.connect(self.load_programs)
-        file_menu.addAction(refresh_action)
-
-        file_menu.addSeparator()
-
-        # Export submenu
-        export_menu = file_menu.addMenu("エクスポート(&E)")
-
-        export_csv_action = QAction("CSV形式(&C)", self)
-        export_csv_action.triggered.connect(lambda: self.export_programs("csv"))
-        export_menu.addAction(export_csv_action)
-
-        export_json_action = QAction("JSON形式(&J)", self)
-        export_json_action.triggered.connect(lambda: self.export_programs("json"))
-        export_menu.addAction(export_json_action)
-
-        export_html_action = QAction("HTML形式(&H)", self)
-        export_html_action.triggered.connect(lambda: self.export_programs("html"))
-        export_menu.addAction(export_html_action)
-
-        file_menu.addSeparator()
-
-        exit_action = QAction("終了(&X)", self)
-        exit_action.setShortcut("Alt+F4")
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        # Tools menu
-        tools_menu = menubar.addMenu("ツール(&T)")
-
-        monitor_action = QAction("インストールモニター(&M)", self)
-        monitor_action.triggered.connect(self.show_monitor)
-        tools_menu.addAction(monitor_action)
-
-        bg_monitor_action = QAction("バックグラウンドモニター設定(&B)", self)
-        bg_monitor_action.triggered.connect(self.show_background_monitor_settings)
-        tools_menu.addAction(bg_monitor_action)
-
-        context_menu_action = QAction("右クリックメニュー統合(&R)", self)
-        context_menu_action.triggered.connect(self.show_context_menu_dialog)
-        tools_menu.addAction(context_menu_action)
-
-        stats_action = QAction("統計(&S)", self)
-        stats_action.triggered.connect(self.show_statistics)
-        tools_menu.addAction(stats_action)
-
-        tools_menu.addSeparator()
-
-        cleanup_action = QAction("古いバックアップを削除(&C)", self)
-        cleanup_action.triggered.connect(self.cleanup_backups)
-        tools_menu.addAction(cleanup_action)
-
-        # Help menu
-        help_menu = menubar.addMenu("ヘルプ(&H)")
-
-        about_action = QAction("バージョン情報(&A)", self)
-        about_action.triggered.connect(self.show_about)
-        help_menu.addAction(about_action)
-
     def load_programs(self):
         """Load installed programs."""
         self.status_bar.showMessage("プログラムを読み込み中...")
@@ -364,7 +269,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setRange(0, 0)  # Indeterminate
 
         # Disable controls
-        self.refresh_button.setEnabled(False)
+        self.search_bar.set_refresh_enabled(False)
 
         # Start loading thread
         self.loader_thread = ProgramLoaderThread()
@@ -374,85 +279,20 @@ class MainWindow(QMainWindow):
 
     def on_programs_loaded(self, programs):
         """Called when programs are loaded."""
-        self.programs = programs
-        self.filtered_programs = programs.copy()
-        self.populate_table()
+        self.table_manager.set_programs(programs)
 
         self.progress_bar.setVisible(False)
-        self.refresh_button.setEnabled(True)
+        self.search_bar.set_refresh_enabled(True)
         self.status_bar.showMessage(f"{len(programs)}個のプログラムを読み込みました", 3000)
 
-    def populate_table(self):
-        """Populate the program table."""
-        # Disable sorting while populating to avoid issues
-        self.program_table.setSortingEnabled(False)
-        self.program_table.setRowCount(0)
+    def on_search_changed(self, text):
+        """Handle search text changes."""
+        count = self.table_manager.filter_programs(text)
+        self.status_bar.showMessage(f"{count}個のプログラムを表示中", 3000)
 
-        for program in self.filtered_programs:
-            row = self.program_table.rowCount()
-            self.program_table.insertRow(row)
-
-            # Checkbox
-            checkbox_item = QTableWidgetItem()
-            checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
-            checkbox_item.setCheckState(Qt.CheckState.Unchecked)
-            self.program_table.setItem(row, 0, checkbox_item)
-
-            # Icon
-            icon = get_program_icon(program)
-            icon_item = QTableWidgetItem()
-            icon_item.setIcon(icon)
-            self.program_table.setItem(row, 1, icon_item)
-
-            # Name
-            self.program_table.setItem(row, 2, QTableWidgetItem(program.name))
-
-            # Version
-            version = program.version or "不明"
-            self.program_table.setItem(row, 3, QTableWidgetItem(version))
-
-            # Publisher
-            publisher = program.publisher or "不明"
-            self.program_table.setItem(row, 4, QTableWidgetItem(publisher))
-
-            # Size
-            size = str(program.estimated_size) if program.estimated_size else "不明"
-            size_item = QTableWidgetItem()
-            size_item.setData(Qt.ItemDataRole.DisplayRole, program.estimated_size or 0)
-            self.program_table.setItem(row, 5, size_item)
-
-            # Install date
-            install_date = program.install_date or "不明"
-            self.program_table.setItem(row, 6, QTableWidgetItem(install_date))
-
-        # Re-enable sorting after population
-        self.program_table.setSortingEnabled(True)
-
-    def filter_programs(self, text):
-        """Filter programs by search text."""
-        if not text:
-            self.filtered_programs = self.programs.copy()
-        else:
-            text_lower = text.lower()
-            self.filtered_programs = [
-                p for p in self.programs
-                if text_lower in p.name.lower() or
-                   (p.publisher and text_lower in p.publisher.lower())
-            ]
-
-        self.populate_table()
-        self.status_bar.showMessage(f"{len(self.filtered_programs)}個のプログラムを表示中", 3000)
-
-    def sort_programs(self, sort_by):
-        """Sort programs."""
-        if sort_by == "名前":
-            self.filtered_programs.sort(key=lambda p: p.name.lower())
-        elif sort_by == "サイズ":
-            self.filtered_programs.sort(key=lambda p: p.estimated_size or 0, reverse=True)
-        elif sort_by == "インストール日":
-            self.filtered_programs.sort(key=lambda p: p.install_date or "", reverse=True)
-
-        self.populate_table()
+    def on_sort_changed(self, sort_by):
+        """Handle sort option changes."""
+        self.table_manager.sort_programs(sort_by)
 
     def on_item_changed(self, item):
         """Called when an item changes (e.g., checkbox state)."""
@@ -462,7 +302,7 @@ class MainWindow(QMainWindow):
 
     def update_button_states(self):
         """Update button states based on checked items."""
-        checked_count = self.get_checked_programs_count()
+        checked_count = self.table_manager.get_checked_programs_count()
         self.batch_uninstall_button.setEnabled(checked_count > 0)
         if checked_count > 0:
             self.batch_uninstall_button.setText(f"選択項目をアンインストール ({checked_count})")
@@ -471,20 +311,14 @@ class MainWindow(QMainWindow):
 
     def on_selection_changed(self):
         """Called when selection changes."""
-        # Count checked items
-        checked_count = self.get_checked_programs_count()
+        # Get selected program
+        self.selected_program = self.table_manager.get_selected_program()
 
-        selected_items = self.program_table.selectedItems()
-        if not selected_items:
-            self.selected_program = None
+        if not self.selected_program:
             self.details_text.clear()
             self.uninstall_button.setEnabled(False)
             self.scan_button.setEnabled(False)
         else:
-            # Get selected row
-            row = selected_items[0].row()
-            self.selected_program = self.filtered_programs[row]
-
             # Update details
             details = f"""
 <b>プログラム名:</b> {self.selected_program.name}<br>
@@ -503,12 +337,8 @@ class MainWindow(QMainWindow):
             self.uninstall_button.setEnabled(True)
             self.scan_button.setEnabled(True)
 
-        # Enable batch uninstall button if items are checked
-        self.batch_uninstall_button.setEnabled(checked_count > 0)
-        if checked_count > 0:
-            self.batch_uninstall_button.setText(f"選択項目をアンインストール ({checked_count})")
-        else:
-            self.batch_uninstall_button.setText("選択項目をアンインストール")
+        # Update batch uninstall button
+        self.update_button_states()
 
     def uninstall_program(self):
         """Uninstall selected program."""
@@ -541,35 +371,9 @@ class MainWindow(QMainWindow):
         dialog = ScanDialog(self.selected_program, self)
         dialog.exec()
 
-    def get_checked_programs_count(self):
-        """Get count of checked programs."""
-        count = 0
-        for row in range(self.program_table.rowCount()):
-            checkbox_item = self.program_table.item(row, 0)
-            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
-                count += 1
-        return count
-
-    def get_checked_programs(self):
-        """Get list of checked programs."""
-        checked_programs = []
-        for row in range(self.program_table.rowCount()):
-            checkbox_item = self.program_table.item(row, 0)
-            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
-                # Get program name from column 2 (name column)
-                name_item = self.program_table.item(row, 2)
-                if name_item:
-                    program_name = name_item.text()
-                    # Find the program in filtered_programs
-                    for program in self.filtered_programs:
-                        if program.name == program_name:
-                            checked_programs.append(program)
-                            break
-        return checked_programs
-
     def batch_uninstall_programs(self):
         """Batch uninstall checked programs."""
-        checked_programs = self.get_checked_programs()
+        checked_programs = self.table_manager.get_checked_programs()
 
         if not checked_programs:
             return
@@ -768,7 +572,7 @@ class MainWindow(QMainWindow):
         if event.key() == Qt.Key.Key_Delete:
             if self.selected_program and self.uninstall_button.isEnabled():
                 self.uninstall_program()
-            elif self.get_checked_programs_count() > 0:
+            elif self.table_manager.get_checked_programs_count() > 0:
                 self.batch_uninstall_programs()
 
         # F5 - Refresh program list
@@ -777,8 +581,7 @@ class MainWindow(QMainWindow):
 
         # Ctrl+F - Focus search box
         elif event.key() == Qt.Key.Key_F and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
-            self.search_box.setFocus()
-            self.search_box.selectAll()
+            self.search_bar.focus_search()
 
         # Ctrl+A - Select/check all items
         elif event.key() == Qt.Key.Key_A and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
@@ -786,8 +589,8 @@ class MainWindow(QMainWindow):
 
         # Escape - Clear search
         elif event.key() == Qt.Key.Key_Escape:
-            if self.search_box.text():
-                self.search_box.clear()
+            if self.search_bar.get_search_text():
+                self.search_bar.clear_search()
             else:
                 super().keyPressEvent(event)
 
@@ -796,26 +599,7 @@ class MainWindow(QMainWindow):
 
     def toggle_all_checkboxes(self):
         """Toggle all checkboxes (select all or deselect all)."""
-        # Check if any are unchecked
-        has_unchecked = False
-        for row in range(self.program_table.rowCount()):
-            checkbox_item = self.program_table.item(row, 0)
-            if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Unchecked:
-                has_unchecked = True
-                break
-
-        # Set all to checked if any are unchecked, otherwise uncheck all
-        new_state = Qt.CheckState.Checked if has_unchecked else Qt.CheckState.Unchecked
-
-        # Block signals to avoid multiple updates
-        self.program_table.blockSignals(True)
-        for row in range(self.program_table.rowCount()):
-            checkbox_item = self.program_table.item(row, 0)
-            if checkbox_item:
-                checkbox_item.setCheckState(new_state)
-        self.program_table.blockSignals(False)
-
-        # Update button states once
+        self.table_manager.toggle_all_checkboxes()
         self.update_button_states()
 
     def show_background_monitor_settings(self):
