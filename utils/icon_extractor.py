@@ -5,6 +5,7 @@ Extracts icons from executables and icon files.
 
 import os
 import tempfile
+from functools import lru_cache
 from typing import Optional
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtCore import QSize
@@ -28,16 +29,28 @@ class IconExtractor:
     - .ico files
     - .exe files with embedded icons
     - Icon paths with index (e.g., "app.exe,0")
+
+    Features:
+    - LRU cache with configurable size (default: 512 icons)
+    - Automatic memory management
     """
 
-    def __init__(self):
+    def __init__(self, cache_size: int = 512):
+        """
+        Initialize the icon extractor.
+
+        Args:
+            cache_size: Maximum number of icons to cache (default: 512)
+        """
         self.cache = {}  # Cache extracted icons
+        self.cache_size = cache_size
+        self.cache_order = []  # Track access order for LRU
         self.default_size = QSize(32, 32)
         self.icon_provider = QFileIconProvider()
 
     def get_icon(self, icon_path: Optional[str], default: Optional[QIcon] = None) -> QIcon:
         """
-        Get QIcon from icon path.
+        Get QIcon from icon path with LRU caching.
 
         Args:
             icon_path: Path to icon file or executable
@@ -49,8 +62,11 @@ class IconExtractor:
         if not icon_path:
             return default or QIcon()
 
-        # Check cache
+        # Check cache (LRU)
         if icon_path in self.cache:
+            # Move to end (most recently used)
+            self.cache_order.remove(icon_path)
+            self.cache_order.append(icon_path)
             return self.cache[icon_path]
 
         # Parse icon path (may include index like "app.exe,0")
@@ -64,7 +80,8 @@ class IconExtractor:
             icon = self._extract_icon(file_path, icon_index)
 
             if not icon.isNull():
-                self.cache[icon_path] = icon
+                # Add to cache with LRU eviction
+                self._add_to_cache(icon_path, icon)
                 return icon
 
         except Exception as e:
@@ -72,6 +89,24 @@ class IconExtractor:
             pass
 
         return default or QIcon()
+
+    def _add_to_cache(self, icon_path: str, icon: QIcon) -> None:
+        """
+        Add icon to cache with LRU eviction.
+
+        Args:
+            icon_path: Icon path (cache key)
+            icon: QIcon object
+        """
+        # Evict least recently used if cache is full
+        if len(self.cache) >= self.cache_size:
+            if self.cache_order:
+                lru_key = self.cache_order.pop(0)
+                del self.cache[lru_key]
+
+        # Add new icon
+        self.cache[icon_path] = icon
+        self.cache_order.append(icon_path)
 
     def _parse_icon_path(self, icon_path: str) -> tuple[str, int]:
         """
@@ -134,6 +169,20 @@ class IconExtractor:
     def clear_cache(self):
         """Clear the icon cache."""
         self.cache.clear()
+        self.cache_order.clear()
+
+    def get_cache_stats(self) -> dict:
+        """
+        Get cache statistics.
+
+        Returns:
+            Dictionary with cache stats (size, capacity, hit_rate)
+        """
+        return {
+            'size': len(self.cache),
+            'capacity': self.cache_size,
+            'usage_percent': (len(self.cache) / self.cache_size * 100) if self.cache_size > 0 else 0
+        }
 
 
 # Global instance

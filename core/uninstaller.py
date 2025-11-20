@@ -6,8 +6,9 @@ Handles the execution of uninstall operations for programs.
 import os
 import re
 import subprocess
+import shlex
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -210,21 +211,21 @@ class Uninstaller:
 
         self.logger.info(f"Uninstalling MSI package: {product_code}")
 
-        # Build msiexec command
+        # Build msiexec command as a list (safer than shell=True)
         if silent:
             # /qn = no UI, /norestart = don't restart
-            cmd = f'msiexec.exe /x {product_code} /qn /norestart'
+            cmd = ['msiexec.exe', '/x', product_code, '/qn', '/norestart']
         else:
             # /passive = progress bar only
-            cmd = f'msiexec.exe /x {product_code} /passive /norestart'
+            cmd = ['msiexec.exe', '/x', product_code, '/passive', '/norestart']
 
-        self.logger.info(f"Executing: {cmd}")
+        self.logger.info(f"Executing: {' '.join(cmd)}")
 
         try:
-            # Execute command
+            # Execute command without shell (security improvement)
             process = subprocess.Popen(
                 cmd,
-                shell=True,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -267,6 +268,41 @@ class Uninstaller:
                 error_message=str(e)
             )
 
+    def _parse_command_string(self, cmd_string: str) -> List[str]:
+        """
+        Parse command string into list of arguments.
+        Handles quoted paths and arguments properly.
+
+        Args:
+            cmd_string: Command string to parse
+
+        Returns:
+            List of command arguments
+        """
+        try:
+            # Try using shlex for proper parsing
+            # On Windows, shlex may not handle all cases perfectly,
+            # so we'll use a Windows-aware approach
+            if cmd_string.startswith('"'):
+                # Command starts with a quoted path
+                end_quote = cmd_string.find('"', 1)
+                if end_quote > 0:
+                    executable = cmd_string[1:end_quote]
+                    args_str = cmd_string[end_quote + 1:].strip()
+                    if args_str:
+                        # Parse remaining arguments
+                        args = shlex.split(args_str)
+                        return [executable] + args
+                    else:
+                        return [executable]
+
+            # Try standard shlex parsing
+            return shlex.split(cmd_string)
+        except ValueError:
+            # Fallback: simple split by spaces (less safe but works)
+            self.logger.warning("Could not parse command string with shlex, using simple split")
+            return cmd_string.split()
+
     def _execute_uninstall_string(self, silent: bool, timeout: int) -> UninstallResult:
         """
         Execute the UninstallString.
@@ -286,22 +322,25 @@ class Uninstaller:
 
         # Use QuietUninstallString if available and silent mode is requested
         if silent and self.program.quiet_uninstall_string:
-            cmd = self.program.quiet_uninstall_string
+            cmd_string = self.program.quiet_uninstall_string
             self.logger.info("Using QuietUninstallString")
         else:
-            cmd = self.program.uninstall_string
+            cmd_string = self.program.uninstall_string
 
             # Try to add silent parameters if not already present
             if silent:
-                cmd = self._add_silent_parameters(cmd)
+                cmd_string = self._add_silent_parameters(cmd_string)
 
-        self.logger.info(f"Executing UninstallString: {cmd}")
+        self.logger.info(f"Executing UninstallString: {cmd_string}")
+
+        # Parse command string to list (security improvement)
+        cmd = self._parse_command_string(cmd_string)
 
         try:
-            # Execute command
+            # Execute command without shell (security improvement)
             process = subprocess.Popen(
                 cmd,
-                shell=True,
+                shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True
@@ -386,7 +425,7 @@ class Uninstaller:
         self.logger.info("Adding default silent parameter: /S")
         return f"{cmd} /S"
 
-    def get_uninstall_command(self, silent: bool = True) -> Optional[str]:
+    def get_uninstall_command(self, silent: bool = True) -> Optional[List[str]]:
         """
         Get the uninstall command that would be executed.
 
@@ -394,24 +433,40 @@ class Uninstaller:
             silent: Whether to get the silent command
 
         Returns:
-            Command string or None
+            Command as list of arguments, or None
         """
         if self._is_msi_package():
             product_code = self._extract_product_code()
             if product_code:
                 if silent:
-                    return f'msiexec.exe /x {product_code} /qn /norestart'
+                    return ['msiexec.exe', '/x', product_code, '/qn', '/norestart']
                 else:
-                    return f'msiexec.exe /x {product_code} /passive /norestart'
+                    return ['msiexec.exe', '/x', product_code, '/passive', '/norestart']
 
         if silent and self.program.quiet_uninstall_string:
-            return self.program.quiet_uninstall_string
+            return self._parse_command_string(self.program.quiet_uninstall_string)
         elif self.program.uninstall_string:
-            cmd = self.program.uninstall_string
+            cmd_string = self.program.uninstall_string
             if silent:
-                cmd = self._add_silent_parameters(cmd)
-            return cmd
+                cmd_string = self._add_silent_parameters(cmd_string)
+            return self._parse_command_string(cmd_string)
 
+        return None
+
+    def get_uninstall_command_string(self, silent: bool = True) -> Optional[str]:
+        """
+        Get the uninstall command as a string (for display purposes).
+
+        Args:
+            silent: Whether to get the silent command
+
+        Returns:
+            Command string or None
+        """
+        cmd = self.get_uninstall_command(silent)
+        if cmd:
+            # Join command parts with proper quoting for display
+            return ' '.join(f'"{part}"' if ' ' in part else part for part in cmd)
         return None
 
 
