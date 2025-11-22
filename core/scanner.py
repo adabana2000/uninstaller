@@ -166,8 +166,15 @@ class LeftoverScanner:
         for base_dir in scan_dirs:
             try:
                 self._scan_directory(base_dir, patterns, max_depth=2)
+            except PermissionError:
+                self.logger.warning(f"Permission denied scanning directory: {base_dir}")
+            except FileNotFoundError:
+                self.logger.warning(f"Directory not found: {base_dir}")
+            except OSError as e:
+                self.logger.warning(f"OS error scanning {base_dir}: {e}")
             except Exception as e:
-                self.logger.warning(f"Error scanning {base_dir}: {e}")
+                # Catch-all for unexpected errors
+                self.logger.error(f"Unexpected error scanning {base_dir}: {e}")
 
     def _scan_directory(
         self,
@@ -197,21 +204,30 @@ class LeftoverScanner:
                     if any(pattern in item_name_lower for pattern in patterns):
                         if item.is_file():
                             # Add file
-                            stat = item.stat()
-                            self.leftovers.append(Leftover(
-                                type="file",
-                                path=str(item),
-                                size=stat.st_size,
-                                last_modified=datetime.fromtimestamp(stat.st_mtime)
-                            ))
+                            try:
+                                stat = item.stat()
+                                self.leftovers.append(Leftover(
+                                    type="file",
+                                    path=str(item),
+                                    size=stat.st_size,
+                                    last_modified=datetime.fromtimestamp(stat.st_mtime)
+                                ))
+                            except (OSError, ValueError) as e:
+                                self.logger.debug(f"Cannot stat file {item}: {e}")
+                                # Add file without size info
+                                self.leftovers.append(Leftover(
+                                    type="file",
+                                    path=str(item)
+                                ))
                         elif item.is_dir():
                             # Add directory (and all its contents)
                             total_size = self._get_directory_size(item)
+                            item_count = self._count_items(item)
                             self.leftovers.append(Leftover(
                                 type="directory",
                                 path=str(item),
                                 size=total_size,
-                                description=f"Directory with {self._count_items(item)} items"
+                                description=f"Directory with {item_count} items"
                             ))
                             # Don't recurse into matched directories
                             continue
@@ -220,12 +236,22 @@ class LeftoverScanner:
                     if item.is_dir() and current_depth < max_depth:
                         self._scan_directory(item, patterns, max_depth, current_depth + 1)
 
-                except (PermissionError, OSError) as e:
-                    # Skip items we can't access
-                    continue
+                except PermissionError:
+                    # Skip items we can't access due to permissions
+                    self.logger.debug(f"Permission denied: {item}")
+                except FileNotFoundError:
+                    # File was deleted during scan
+                    self.logger.debug(f"File not found (deleted during scan): {item}")
+                except OSError as e:
+                    # Other OS errors (e.g., broken symlinks)
+                    self.logger.debug(f"OS error accessing {item}: {e}")
 
-        except (PermissionError, OSError) as e:
-            self.logger.debug(f"Cannot access directory {directory}: {e}")
+        except PermissionError:
+            self.logger.debug(f"Permission denied accessing directory: {directory}")
+        except FileNotFoundError:
+            self.logger.debug(f"Directory not found: {directory}")
+        except OSError as e:
+            self.logger.debug(f"OS error accessing directory {directory}: {e}")
 
     def _get_directory_size(self, directory: Path) -> int:
         """
@@ -235,7 +261,7 @@ class LeftoverScanner:
             directory: Directory path
 
         Returns:
-            Total size in bytes
+            Total size in bytes (0 if inaccessible)
         """
         total_size = 0
         try:
@@ -243,10 +269,19 @@ class LeftoverScanner:
                 if item.is_file():
                     try:
                         total_size += item.stat().st_size
-                    except (PermissionError, OSError):
+                    except (PermissionError, FileNotFoundError):
+                        # Skip inaccessible or deleted files
                         continue
-        except Exception:
-            pass
+                    except OSError as e:
+                        # Log other OS errors but continue
+                        self.logger.debug(f"Error getting size of {item}: {e}")
+                        continue
+        except (PermissionError, FileNotFoundError):
+            # Directory inaccessible or deleted
+            self.logger.debug(f"Cannot access directory for size calculation: {directory}")
+        except OSError as e:
+            # Other OS errors
+            self.logger.debug(f"OS error calculating directory size {directory}: {e}")
         return total_size
 
     def _count_items(self, directory: Path) -> int:
@@ -257,11 +292,15 @@ class LeftoverScanner:
             directory: Directory path
 
         Returns:
-            Number of items
+            Number of items (0 if inaccessible)
         """
         try:
             return sum(1 for _ in directory.rglob('*'))
-        except Exception:
+        except (PermissionError, FileNotFoundError):
+            self.logger.debug(f"Cannot access directory for item count: {directory}")
+            return 0
+        except OSError as e:
+            self.logger.debug(f"OS error counting items in {directory}: {e}")
             return 0
 
     def _scan_registry(self, patterns: List[str], program: InstalledProgram) -> None:

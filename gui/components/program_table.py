@@ -3,12 +3,27 @@ Program table management component.
 Handles table creation, population, filtering, and sorting.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Final
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt6.QtCore import Qt, QSize
 
 from core.registry import InstalledProgram
 from utils.icon_extractor import get_program_icon
+
+# Constants for table columns
+COLUMN_CHECKBOX: Final[int] = 0
+COLUMN_ICON: Final[int] = 1
+COLUMN_NAME: Final[int] = 2
+COLUMN_VERSION: Final[int] = 3
+COLUMN_PUBLISHER: Final[int] = 4
+COLUMN_SIZE: Final[int] = 5
+COLUMN_INSTALL_DATE: Final[int] = 6
+
+# UI Constants
+CHECKBOX_COLUMN_WIDTH: Final[int] = 40
+ICON_COLUMN_WIDTH: Final[int] = 40
+DEFAULT_ROW_HEIGHT: Final[int] = 36
+ICON_SIZE: Final[int] = 32
 
 
 class ProgramTableManager:
@@ -35,7 +50,7 @@ class ProgramTableManager:
 
         self._configure_table()
 
-    def _configure_table(self):
+    def _configure_table(self) -> None:
         """Configure table settings."""
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
@@ -43,14 +58,16 @@ class ProgramTableManager:
         ])
 
         # Set column widths
-        self.table.setColumnWidth(0, 40)  # Checkbox
-        self.table.setColumnWidth(1, 40)  # Icon
+        self.table.setColumnWidth(COLUMN_CHECKBOX, CHECKBOX_COLUMN_WIDTH)
+        self.table.setColumnWidth(COLUMN_ICON, ICON_COLUMN_WIDTH)
 
         # Make program name column stretch
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(
+            COLUMN_NAME, QHeaderView.ResizeMode.Stretch
+        )
 
         # Set row height for icons
-        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.verticalHeader().setDefaultSectionSize(DEFAULT_ROW_HEIGHT)
 
         # Hide vertical header (row numbers)
         self.table.verticalHeader().setVisible(False)
@@ -60,12 +77,12 @@ class ProgramTableManager:
         self.table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
 
         # Enable icon rendering
-        self.table.setIconSize(QSize(32, 32))
+        self.table.setIconSize(QSize(ICON_SIZE, ICON_SIZE))
 
         # Enable sorting
         self.table.setSortingEnabled(True)
 
-    def set_programs(self, programs: List[InstalledProgram]):
+    def set_programs(self, programs: List[InstalledProgram]) -> None:
         """
         Set the programs list.
 
@@ -76,7 +93,7 @@ class ProgramTableManager:
         self.filtered_programs = programs.copy()
         self.populate_table()
 
-    def populate_table(self):
+    def populate_table(self) -> None:
         """Populate the table with filtered programs."""
         # Disable sorting while populating to avoid issues
         self.table.setSortingEnabled(False)
@@ -90,33 +107,33 @@ class ProgramTableManager:
             checkbox_item = QTableWidgetItem()
             checkbox_item.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
             checkbox_item.setCheckState(Qt.CheckState.Unchecked)
-            self.table.setItem(row, 0, checkbox_item)
+            self.table.setItem(row, COLUMN_CHECKBOX, checkbox_item)
 
             # Icon
             icon = get_program_icon(program)
             icon_item = QTableWidgetItem()
             icon_item.setIcon(icon)
-            self.table.setItem(row, 1, icon_item)
+            self.table.setItem(row, COLUMN_ICON, icon_item)
 
             # Name
-            self.table.setItem(row, 2, QTableWidgetItem(program.name))
+            self.table.setItem(row, COLUMN_NAME, QTableWidgetItem(program.name))
 
             # Version
             version = program.version or "不明"
-            self.table.setItem(row, 3, QTableWidgetItem(version))
+            self.table.setItem(row, COLUMN_VERSION, QTableWidgetItem(version))
 
             # Publisher
             publisher = program.publisher or "不明"
-            self.table.setItem(row, 4, QTableWidgetItem(publisher))
+            self.table.setItem(row, COLUMN_PUBLISHER, QTableWidgetItem(publisher))
 
             # Size (use DisplayRole for proper sorting)
             size_item = QTableWidgetItem()
             size_item.setData(Qt.ItemDataRole.DisplayRole, program.estimated_size or 0)
-            self.table.setItem(row, 5, size_item)
+            self.table.setItem(row, COLUMN_SIZE, size_item)
 
             # Install date
             install_date = program.install_date or "不明"
-            self.table.setItem(row, 6, QTableWidgetItem(install_date))
+            self.table.setItem(row, COLUMN_INSTALL_DATE, QTableWidgetItem(install_date))
 
         # Re-enable sorting after population
         self.table.setSortingEnabled(True)
@@ -144,7 +161,7 @@ class ProgramTableManager:
         self.populate_table()
         return len(self.filtered_programs)
 
-    def sort_programs(self, sort_by: str):
+    def sort_programs(self, sort_by: str) -> None:
         """
         Sort programs by specified field.
 
@@ -167,12 +184,12 @@ class ProgramTableManager:
         Returns:
             List of checked InstalledProgram objects
         """
-        checked_programs = []
+        checked_programs: List[InstalledProgram] = []
         for row in range(self.table.rowCount()):
-            checkbox_item = self.table.item(row, 0)
+            checkbox_item = self.table.item(row, COLUMN_CHECKBOX)
             if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
-                # Get program name from column 2
-                name_item = self.table.item(row, 2)
+                # Get program name from name column
+                name_item = self.table.item(row, COLUMN_NAME)
                 if name_item:
                     program_name = name_item.text()
                     # Find program in filtered_programs
@@ -191,17 +208,17 @@ class ProgramTableManager:
         """
         count = 0
         for row in range(self.table.rowCount()):
-            checkbox_item = self.table.item(row, 0)
+            checkbox_item = self.table.item(row, COLUMN_CHECKBOX)
             if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Checked:
                 count += 1
         return count
 
-    def toggle_all_checkboxes(self):
+    def toggle_all_checkboxes(self) -> None:
         """Toggle all checkboxes (select all or deselect all)."""
         # Check if any are unchecked
         has_unchecked = False
         for row in range(self.table.rowCount()):
-            checkbox_item = self.table.item(row, 0)
+            checkbox_item = self.table.item(row, COLUMN_CHECKBOX)
             if checkbox_item and checkbox_item.checkState() == Qt.CheckState.Unchecked:
                 has_unchecked = True
                 break
@@ -212,7 +229,7 @@ class ProgramTableManager:
         # Block signals to avoid multiple updates
         self.table.blockSignals(True)
         for row in range(self.table.rowCount()):
-            checkbox_item = self.table.item(row, 0)
+            checkbox_item = self.table.item(row, COLUMN_CHECKBOX)
             if checkbox_item:
                 checkbox_item.setCheckState(new_state)
         self.table.blockSignals(False)
@@ -233,8 +250,8 @@ class ProgramTableManager:
             return self.filtered_programs[row]
         return None
 
-    def clear(self):
-        """Clear the table."""
+    def clear(self) -> None:
+        """Clear the table and reset program lists."""
         self.table.setRowCount(0)
         self.programs = []
         self.filtered_programs = []

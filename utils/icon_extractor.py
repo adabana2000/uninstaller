@@ -84,9 +84,16 @@ class IconExtractor:
                 self._add_to_cache(icon_path, icon)
                 return icon
 
-        except Exception as e:
-            # Silent fail, return default
+        except (OSError, FileNotFoundError) as e:
+            # File not found or inaccessible - silent fail
             pass
+        except RuntimeError as e:
+            # Qt runtime error - silent fail
+            pass
+        except Exception as e:
+            # Unexpected error - log it
+            import logging
+            logging.debug(f"Unexpected error extracting icon from {file_path}: {e}")
 
         return default or QIcon()
 
@@ -161,7 +168,8 @@ class IconExtractor:
         if file_ext == '.ico':
             try:
                 return QIcon(file_path)
-            except:
+            except (OSError, RuntimeError) as e:
+                # Failed to load icon file
                 pass
 
         return QIcon()
