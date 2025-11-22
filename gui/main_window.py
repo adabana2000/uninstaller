@@ -6,7 +6,7 @@ import sys
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QStatusBar, QMessageBox, QSplitter, QTextEdit,
-    QProgressBar, QSystemTrayIcon, QMenu, QTableWidget
+    QProgressBar, QSystemTrayIcon, QMenu, QTableWidget, QLabel
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QCloseEvent
@@ -15,7 +15,9 @@ from core.registry import RegistryReader, InstalledProgram
 from utils.logger import get_logger
 from utils.permissions import is_admin
 from gui.components import ProgramTableManager, SearchBarComponent, MenuBarHandler
+from gui.components.quick_actions import get_quick_actions_handler
 from gui.widgets.uninstall_dialog import UninstallDialog
+from gui.widgets.enhanced_confirm_dialog import show_enhanced_confirm_dialog
 from gui.widgets.scan_dialog import ScanDialog
 from gui.widgets.monitor_dialog import MonitorDialog
 from gui.widgets.background_monitor_settings_dialog import BackgroundMonitorSettingsDialog
@@ -50,6 +52,10 @@ class MainWindow(QMainWindow):
         self.table_manager = None
         self.search_bar = None
         self.menu_handler = None
+        self.quick_actions = get_quick_actions_handler()
+
+        # Settings
+        self.skip_uninstall_confirmation = False
 
         self.init_ui()
         self.init_system_tray()
@@ -84,9 +90,10 @@ class MainWindow(QMainWindow):
 
         # Program table with manager
         self.program_table = QTableWidget()
-        self.table_manager = ProgramTableManager(self.program_table)
+        self.table_manager = ProgramTableManager(self.program_table, self)
         self.program_table.itemSelectionChanged.connect(self.on_selection_changed)
         self.program_table.itemChanged.connect(self.on_item_changed)
+        self._connect_quick_action_signals()
 
         splitter.addWidget(self.program_table)
 
@@ -232,6 +239,12 @@ class MainWindow(QMainWindow):
         self.menu_handler.about_requested.connect(self.show_about)
         self.menu_handler.exit_requested.connect(self.close)
 
+    def _connect_quick_action_signals(self):
+        """Connect quick action signals to handlers."""
+        self.table_manager.open_folder_requested.connect(self.handle_open_folder)
+        self.table_manager.run_program_requested.connect(self.handle_run_program)
+        self.table_manager.open_website_requested.connect(self.handle_open_website)
+
     def init_background_monitor(self):
         """Initialize background monitor with callback."""
         def on_installation_detected(program_name: str):
@@ -354,6 +367,22 @@ class MainWindow(QMainWindow):
                 "アプリケーションを管理者として実行してください。"
             )
             return
+
+        # Show enhanced confirmation dialog (unless user opted to skip)
+        if not self.skip_uninstall_confirmation:
+            confirmed, skip_in_future = show_enhanced_confirm_dialog(
+                self.selected_program,
+                self.table_manager.programs,
+                self
+            )
+
+            if not confirmed:
+                return
+
+            # Update skip preference if user checked the box
+            if skip_in_future:
+                self.skip_uninstall_confirmation = True
+                self.logger.info("User opted to skip uninstall confirmation in future")
 
         # Show uninstall dialog
         dialog = UninstallDialog(self.selected_program, self)
@@ -622,7 +651,7 @@ class MainWindow(QMainWindow):
             self,
             "バージョン情報",
             "<h2>Windows Uninstaller</h2>"
-            "<p>バージョン: 0.7.0 (Phase 7 完了)</p>"
+            "<p>バージョン: 0.8.0 (クイックアクション機能追加)</p>"
             "<p>IObit Uninstallerのような高機能なアンインストーラー</p>"
             "<p><b>機能:</b></p>"
             "<ul>"
@@ -639,8 +668,65 @@ class MainWindow(QMainWindow):
             "<li>キーボードショートカット対応</li>"
             "<li>システムトレイ統合</li>"
             "<li>右クリックメニュー統合 (エクスプローラーから直接アンインストール)</li>"
+            "<li><b>NEW:</b> クイックアクション (フォルダを開く、プログラム実行、ウェブサイト)</li>"
+            "<li><b>NEW:</b> アンインストール前の詳細確認ダイアログ</li>"
             "</ul>"
         )
+
+    def handle_open_folder(self, program: InstalledProgram):
+        """
+        Handle open folder quick action.
+
+        Args:
+            program: Program to open folder for
+        """
+        self.logger.info(f"Opening folder for {program.name}")
+        success = self.quick_actions.open_folder(program)
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "エラー",
+                f"フォルダを開けませんでした。\n\n"
+                f"プログラム: {program.name}\n"
+                f"インストール先: {program.install_location or '不明'}"
+            )
+
+    def handle_run_program(self, program: InstalledProgram):
+        """
+        Handle run program quick action.
+
+        Args:
+            program: Program to run
+        """
+        self.logger.info(f"Running program {program.name}")
+        success = self.quick_actions.run_program(program)
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "エラー",
+                f"プログラムを実行できませんでした。\n\n"
+                f"プログラム: {program.name}"
+            )
+
+    def handle_open_website(self, program: InstalledProgram):
+        """
+        Handle open website quick action.
+
+        Args:
+            program: Program to open website for
+        """
+        self.logger.info(f"Opening website for {program.name}")
+        success = self.quick_actions.open_website(program)
+
+        if not success:
+            QMessageBox.warning(
+                self,
+                "エラー",
+                f"ウェブサイトを開けませんでした。\n\n"
+                f"プログラム: {program.name}"
+            )
 
 
 def launch_gui():

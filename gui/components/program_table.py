@@ -4,8 +4,9 @@ Handles table creation, population, filtering, and sorting.
 """
 
 from typing import List, Optional, Final
-from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QMenu
+from PyQt6.QtGui import QAction
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QObject
 
 from core.registry import InstalledProgram
 from utils.icon_extractor import get_program_icon
@@ -26,7 +27,7 @@ DEFAULT_ROW_HEIGHT: Final[int] = 36
 ICON_SIZE: Final[int] = 32
 
 
-class ProgramTableManager:
+class ProgramTableManager(QObject):
     """
     Manages the program list table.
 
@@ -35,20 +36,34 @@ class ProgramTableManager:
     - Data population
     - Filtering and sorting
     - Checkbox management
+    - Context menu and quick actions
+
+    Signals:
+        open_folder_requested: Open program's installation folder
+        run_program_requested: Run the program
+        open_website_requested: Open program's website
     """
 
-    def __init__(self, table_widget: QTableWidget):
+    # Signals for quick actions
+    open_folder_requested = pyqtSignal(InstalledProgram)
+    run_program_requested = pyqtSignal(InstalledProgram)
+    open_website_requested = pyqtSignal(InstalledProgram)
+
+    def __init__(self, table_widget: QTableWidget, parent=None):
         """
         Initialize the table manager.
 
         Args:
             table_widget: QTableWidget to manage
+            parent: Parent QObject
         """
+        super().__init__(parent)
         self.table = table_widget
         self.programs: List[InstalledProgram] = []
         self.filtered_programs: List[InstalledProgram] = []
 
         self._configure_table()
+        self._setup_context_menu()
 
     def _configure_table(self) -> None:
         """Configure table settings."""
@@ -255,3 +270,74 @@ class ProgramTableManager:
         self.table.setRowCount(0)
         self.programs = []
         self.filtered_programs = []
+
+    def _setup_context_menu(self) -> None:
+        """Set up context menu for the table."""
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._show_context_menu)
+
+    def _show_context_menu(self, position) -> None:
+        """
+        Show context menu at the given position.
+
+        Args:
+            position: Position where menu should be shown
+        """
+        # Get the program at the clicked row
+        item = self.table.itemAt(position)
+        if not item:
+            return
+
+        row = item.row()
+        if row < 0 or row >= len(self.filtered_programs):
+            return
+
+        program = self.filtered_programs[row]
+
+        # Create context menu
+        menu = QMenu(self.table)
+
+        # Open folder action
+        if program.install_location:
+            open_folder_action = QAction("フォルダを開く(&F)", self.table)
+            open_folder_action.triggered.connect(lambda: self.open_folder_requested.emit(program))
+            menu.addAction(open_folder_action)
+
+        # Run program action
+        if self._can_run_program(program):
+            run_program_action = QAction("プログラムを実行(&R)", self.table)
+            run_program_action.triggered.connect(lambda: self.run_program_requested.emit(program))
+            menu.addAction(run_program_action)
+
+        # Open website action
+        if program.publisher:
+            open_website_action = QAction("ウェブサイトを開く(&W)", self.table)
+            open_website_action.triggered.connect(lambda: self.open_website_requested.emit(program))
+            menu.addAction(open_website_action)
+
+        # Show menu if it has actions
+        if not menu.isEmpty():
+            menu.addSeparator()
+            # Add program info at the bottom
+            info_action = QAction(f"プログラム: {program.name}", self.table)
+            info_action.setEnabled(False)
+            menu.addAction(info_action)
+
+            menu.exec(self.table.viewport().mapToGlobal(position))
+
+    def _can_run_program(self, program: InstalledProgram) -> bool:
+        """
+        Check if a program can be executed.
+
+        Args:
+            program: InstalledProgram to check
+
+        Returns:
+            True if program has an executable path
+        """
+        # Check if we can extract an executable from display_icon or install_location
+        if program.display_icon and program.display_icon.lower().endswith('.exe'):
+            return True
+        if program.install_location:
+            return True
+        return False
