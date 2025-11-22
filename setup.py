@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 setup(
     name="windows-uninstaller",
-    version="0.7.0",
-    description="Advanced Windows application uninstaller with leftover cleanup",
+    version="0.8.0",
+    description="Advanced Windows application uninstaller with leftover cleanup and quick actions",
     author="Your Name",
     packages=find_packages(),
     install_requires=[

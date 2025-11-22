@@ -39,6 +39,6 @@ if errorlevel 1 (
 echo.
 echo [2/2] Build complete!
 echo.
-echo Installer location: Output\WindowsUninstaller-Setup-0.7.0.exe
+echo Installer location: Output\WindowsUninstaller-Setup-0.8.0.exe
 echo.
 pause

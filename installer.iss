@@ -2,7 +2,7 @@
 ; Requires Inno Setup 6.0 or later: https://jrsoftware.org/isinfo.php
 
 #define MyAppName "Windows Uninstaller"
-#define MyAppVersion "0.7.0"
+#define MyAppVersion "0.8.0"
 #define MyAppPublisher "Your Name"
 #define MyAppURL "https://github.com/adabana2000/uninstaller"
 #define MyAppExeName "WindowsUninstaller.exe"
